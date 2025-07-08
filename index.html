@@ -22,6 +22,15 @@
             top: 10px;
             left: 10px;
             z-index: 10;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            transition: opacity 0.2s, visibility 0.2s;
+        }
+        .controls.hidden {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
         }
         .player {
             width: 100vw;
@@ -38,11 +47,63 @@
             display: block;
             background: black;
         }
+        .mute-btn, .hide-controls-btn {
+            padding: 4px 12px;
+            border: none;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+            font-size: 1em;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+            height: 2.25em;
+            min-width: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mute-btn.muted {
+            background: #a22;
+        }
+        .mute-btn:focus, .hide-controls-btn:focus {
+            outline: 2px solid #fff;
+        }
+        #camera-select {
+            font-size: 1em;
+            font-family: inherit;
+            height: 2.25em;
+            border-radius: 4px;
+            border: 1px solid #888;
+            background: #222;
+            color: #fff;
+            padding: 0 8px;
+        }
+        #camera-select:focus {
+            outline: 2px solid #fff;
+        }
+        .hide-controls-btn {
+            min-width: 2.25em;
+            width: 2.25em;
+            height: 2.25em;
+            padding: 0;
+            font-size: 1.15em;
+            background: #111;
+            border: 1px solid #555;
+            box-sizing: border-box;
+        }
+        .hide-controls-btn:hover, .hide-controls-btn:focus-visible {
+            background: #333;
+        }
     </style>
 </head>
 <body>
-    <div class="controls">
+    <div class="controls" id="controls-bar">
+        <button id="hide-controls-btn" class="hide-controls-btn" type="button" title="Hide controls (H)">
+            <span id="hide-controls-icon" aria-label="Hide controls">⬅</span>
+        </button>
         <select id="camera-select"></select>
+        <button id="mute-btn" class="mute-btn" type="button">Mute</button>
     </div>
     <div class="player">
         <video id="webcam-stream" autoplay playsinline></video>
@@ -50,7 +111,14 @@
     <script>
         const webcamStream = document.getElementById("webcam-stream");
         const cameraSelect = document.getElementById("camera-select");
+        const muteBtn = document.getElementById("mute-btn");
+        const controlsBar = document.getElementById("controls-bar");
+        const hideControlsBtn = document.getElementById("hide-controls-btn");
+        const hideControlsIcon = document.getElementById("hide-controls-icon");
+
         let currentStream = null;
+        let audioMuted = false;
+        let controlsHidden = false;
 
         const constraints = {
             audio: true,
@@ -106,6 +174,33 @@
             });
         }
 
+        function updateMuteButtonUI() {
+            if (audioMuted) {
+                muteBtn.textContent = "Unmute";
+                muteBtn.classList.add("muted");
+            } else {
+                muteBtn.textContent = "Mute";
+                muteBtn.classList.remove("muted");
+            }
+        }
+
+        function setStreamAudioMuted(muted) {
+            if (currentStream) {
+                currentStream.getAudioTracks().forEach(track => {
+                    track.enabled = !muted;
+                });
+            }
+            audioMuted = muted;
+            updateMuteButtonUI();
+        }
+
+        function toggleMute() {
+            audioMuted = !audioMuted;
+            setStreamAudioMuted(audioMuted);
+        }
+
+        muteBtn.addEventListener("click", toggleMute);
+
         function startCamera(deviceId) {
             stopCurrentStream();
             getVideoStream(deviceId)
@@ -113,6 +208,7 @@
                     currentStream = stream;
                     webcamStream.srcObject = stream;
                     populateCameraList(deviceId);
+                    setStreamAudioMuted(audioMuted); // Maintain mute state on stream switch
                 })
                 .catch(error => {
                     alert("Could not access webcam: " + error.message);
@@ -124,13 +220,48 @@
             startCamera(cameraSelect.value);
         });
 
+        // HIDE/SHOW CONTROLS LOGIC
+
+        function setControlsHidden(hidden) {
+            controlsHidden = hidden;
+            if (controlsHidden) {
+                controlsBar.classList.add('hidden');
+                hideControlsIcon.textContent = '➡';
+                hideControlsBtn.title = "Show controls (H)";
+            } else {
+                controlsBar.classList.remove('hidden');
+                hideControlsIcon.textContent = '⬅';
+                hideControlsBtn.title = "Hide controls (H)";
+            }
+        }
+
+        hideControlsBtn.addEventListener("click", () => {
+            setControlsHidden(!controlsHidden);
+        });
+
+        document.addEventListener("keydown", (e) => {
+            // Ignore if focus is in an input/select/textarea or with modifier keys
+            if (
+                e.altKey || e.ctrlKey || e.metaKey || e.shiftKey ||
+                ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)
+            ) return;
+            if (e.key === 'h' || e.key === 'H') {
+                setControlsHidden(!controlsHidden);
+                e.preventDefault();
+            }
+            if (e.key === 'm' || e.key === 'M') {
+                toggleMute();
+                e.preventDefault();
+            }
+        });
+
         // Initial camera setup after permission
         function init() {
-            // First, ask for permission to get device labels
             getVideoStream()
             .then(stream => {
                 currentStream = stream;
                 webcamStream.srcObject = stream;
+                setStreamAudioMuted(audioMuted);
                 return navigator.mediaDevices.enumerateDevices();
             })
             .then(devices => {
@@ -160,6 +291,8 @@
             navigator.mediaDevices.getUserMedia &&
             navigator.mediaDevices.enumerateDevices
         ) {
+            updateMuteButtonUI();
+            setControlsHidden(false);
             init();
         } else {
             alert("Your browser does not support required Media Devices APIs.");
