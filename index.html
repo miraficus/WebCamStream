@@ -6,56 +6,165 @@
     <title>Webcam Stream</title>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
-    <script>
-    </script>
     <style>
-        body {
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+        html, body {
+            
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background-color: #444444;
+            overflow: hidden;
         }
-
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+        }
         .player {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            max-height: 100%;
+            width: 100vw;
+            height: 100vh;
             background-color: red;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-
         .player video {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;  
+            height: 100vh;
+            width: auto;
+            max-width: 100vw;
+            display: block;
+            background: black;
         }
-
     </style>
 </head>
 <body>
+    <div class="controls">
+        <label for="camera-select" style="color:white;">Camera: </label>
+        <select id="camera-select"></select>
+    </div>
     <div class="player">
-        <video id="webcam-stream" autoplay></video>
+        <video id="webcam-stream" autoplay playsinline></video>
     </div>
     <script>
         const webcamStream = document.getElementById("webcam-stream");
+        const cameraSelect = document.getElementById("camera-select");
+        let currentStream = null;
+
         const constraints = {
             audio: true,
             video: {
                 width: { min: 1024, ideal: 1280, max: 1920 },
                 height: { min: 576, ideal: 720, max: 1080 },
-                facingMode: "environment"
             }
         };
 
-        navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-            webcamStream.srcObject = stream;
-        })
-        .catch((err) => {
-            console.error(error);
+        function stopCurrentStream() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+            }
+        }
+
+        function getVideoStream(deviceId) {
+            const videoConstraints = { ...constraints.video };
+            if (deviceId) {
+                videoConstraints.deviceId = { exact: deviceId };
+            }
+            return navigator.mediaDevices.getUserMedia({
+                audio: constraints.audio,
+                video: videoConstraints
+            });
+        }
+
+        function populateCameraList(selectedDeviceId = null) {
+            navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                const videoDevices = devices.filter(device => device.kind === "videoinput");
+                cameraSelect.innerHTML = "";
+                videoDevices.forEach((device, idx) => {
+                    const option = document.createElement("option");
+                    option.value = device.deviceId;
+                    option.text = device.label || `Camera ${idx + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                // Select preferred camera if not set
+                if (selectedDeviceId) {
+                    cameraSelect.value = selectedDeviceId;
+                } else {
+                    // Prefer USB camera if present
+                    let preferredDevice = videoDevices[0];
+                    for (const device of videoDevices) {
+                        if (/usb/i.test(device.label)) {
+                            preferredDevice = device;
+                            break;
+                        }
+                    }
+                    cameraSelect.value = preferredDevice.deviceId;
+                }
+            });
+        }
+
+        function startCamera(deviceId) {
+            stopCurrentStream();
+            getVideoStream(deviceId)
+                .then(stream => {
+                    currentStream = stream;
+                    webcamStream.srcObject = stream;
+                    populateCameraList(deviceId);
+                })
+                .catch(error => {
+                    alert("Could not access webcam: " + error.message);
+                    console.error(error);
+                });
+        }
+
+        cameraSelect.addEventListener("change", () => {
+            startCamera(cameraSelect.value);
         });
 
+        // Initial camera setup after permission
+        function init() {
+            // First, ask for permission to get device labels
+            getVideoStream()
+            .then(stream => {
+                currentStream = stream;
+                webcamStream.srcObject = stream;
+                return navigator.mediaDevices.enumerateDevices();
+            })
+            .then(devices => {
+                const videoDevices = devices.filter(device => device.kind === "videoinput");
+                populateCameraList();
+                // Prefer USB camera if present
+                let preferredDevice = videoDevices[0];
+                for (const device of videoDevices) {
+                    if (/usb/i.test(device.label)) {
+                        preferredDevice = device;
+                        break;
+                    }
+                }
+                // If not already using preferred device, switch
+                if (preferredDevice && preferredDevice.deviceId !== currentStream.getVideoTracks()[0].getSettings().deviceId) {
+                    startCamera(preferredDevice.deviceId);
+                }
+            })
+            .catch(error => {
+                alert("Could not access webcam: " + error.message);
+                console.error(error);
+            });
+        }
+
+        if (
+            navigator.mediaDevices &&
+            navigator.mediaDevices.getUserMedia &&
+            navigator.mediaDevices.enumerateDevices
+        ) {
+            init();
+        } else {
+            alert("Your browser does not support required Media Devices APIs.");
+        }
     </script>
 </body>
 </html>
