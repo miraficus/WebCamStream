@@ -47,7 +47,7 @@
             display: block;
             background: black;
         }
-        .mute-btn, .hide-controls-btn {
+        .mute-btn, .hide-controls-btn, .fullscreen-btn {
             padding: 4px 12px;
             border: none;
             border-radius: 4px;
@@ -63,10 +63,26 @@
             align-items: center;
             justify-content: center;
         }
+        .fullscreen-btn {
+            min-width: 2.25em;
+            width: 2.25em;
+            height: 2.25em;
+            padding: 0;
+            font-size: 1.15em;
+            background: #222;
+            border: 1px solid #555;
+            box-sizing: border-box;
+        }
+        .fullscreen-btn.active {
+            background: #246;
+        }
+        .fullscreen-btn:hover, .fullscreen-btn:focus-visible {
+            background: #333;
+        }
         .mute-btn.muted {
             background: #a22;
         }
-        .mute-btn:focus, .hide-controls-btn:focus {
+        .mute-btn:focus, .hide-controls-btn:focus, .fullscreen-btn:focus {
             outline: 2px solid #fff;
         }
         #camera-select {
@@ -104,8 +120,11 @@
         </button>
         <select id="camera-select"></select>
         <button id="mute-btn" class="mute-btn" type="button">Mute</button>
+        <button id="fullscreen-btn" class="fullscreen-btn" type="button" title="Fullscreen (F)">
+            <span id="fullscreen-icon" aria-label="Fullscreen">⛶</span>
+        </button>
     </div>
-    <div class="player">
+    <div class="player" id="player">
         <video id="webcam-stream" autoplay playsinline></video>
     </div>
     <script>
@@ -115,10 +134,14 @@
         const controlsBar = document.getElementById("controls-bar");
         const hideControlsBtn = document.getElementById("hide-controls-btn");
         const hideControlsIcon = document.getElementById("hide-controls-icon");
+        const fullscreenBtn = document.getElementById("fullscreen-btn");
+        const fullscreenIcon = document.getElementById("fullscreen-icon");
+        const player = document.getElementById("player");
 
         let currentStream = null;
         let audioMuted = false;
         let controlsHidden = false;
+        let isFullscreen = false;
 
         const constraints = {
             audio: true,
@@ -239,6 +262,60 @@
             setControlsHidden(!controlsHidden);
         });
 
+        // FULLSCREEN LOGIC
+
+        function setFullscreen(full) {
+            isFullscreen = full;
+            if (isFullscreen) {
+                if (player.requestFullscreen) {
+                    player.requestFullscreen();
+                } else if (player.webkitRequestFullscreen) {
+                    player.webkitRequestFullscreen();
+                } else if (player.msRequestFullscreen) {
+                    player.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+            updateFullscreenButtonUI();
+        }
+
+        function updateFullscreenButtonUI() {
+            if (isFullscreen) {
+                fullscreenBtn.classList.add("active");
+                fullscreenIcon.textContent = "🡽"; // Contract icon
+                fullscreenBtn.title = "Exit fullscreen (F)";
+            } else {
+                fullscreenBtn.classList.remove("active");
+                fullscreenIcon.textContent = "⛶"; // Expand icon
+                fullscreenBtn.title = "Fullscreen (F)";
+            }
+        }
+
+        fullscreenBtn.addEventListener("click", () => {
+            setFullscreen(!isFullscreen);
+        });
+
+        // Watch for fullscreen changes (so exiting with ESC updates button)
+        document.addEventListener('fullscreenchange', () => {
+            isFullscreen = !!document.fullscreenElement;
+            updateFullscreenButtonUI();
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            isFullscreen = !!document.webkitFullscreenElement;
+            updateFullscreenButtonUI();
+        });
+        document.addEventListener('msfullscreenchange', () => {
+            isFullscreen = !!document.msFullscreenElement;
+            updateFullscreenButtonUI();
+        });
+
         document.addEventListener("keydown", (e) => {
             // Ignore if focus is in an input/select/textarea or with modifier keys
             if (
@@ -251,6 +328,10 @@
             }
             if (e.key === 'm' || e.key === 'M') {
                 toggleMute();
+                e.preventDefault();
+            }
+            if (e.key === 'f' || e.key === 'F') {
+                setFullscreen(!isFullscreen);
                 e.preventDefault();
             }
         });
@@ -293,6 +374,7 @@
         ) {
             updateMuteButtonUI();
             setControlsHidden(false);
+            updateFullscreenButtonUI();
             init();
         } else {
             alert("Your browser does not support required Media Devices APIs.");
