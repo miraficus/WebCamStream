@@ -12,8 +12,26 @@
         body {
             margin: 0;
             padding: 0;
-        
+            width: 100%;
+            height: 100%;
+            background-color: #444444;
         }
+
+        .player {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            max-height: 100%;
+            background-color: red;
+        }
+
+        .player video {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;  
+        }
+
     </style>
 </head>
 <body>
@@ -21,8 +39,23 @@
         <video id="webcam-stream" autoplay></video>
     </div>
     <script>
-        const webcamstream = document.getElementById("webcam-stream");
-        
+        const webcamStream = document.getElementById("webcam-stream");
+        const constraints = {
+            audio: true,
+            video: {
+                width: { min: 1024, ideal: 1280, max: 1920 },
+                height: { min: 576, ideal: 720, max: 1080 },
+                facingMode: "environment"
+            }
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+            webcamStream.srcObject = stream;
+        })
+        .catch((err) => {
+            console.error(error);
+        });
+
     </script>
 </body>
 </html>
